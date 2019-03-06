@@ -73,6 +73,8 @@ class BotoCloudProvider(AbstractCloudProvider):
                         used as a default in `start_instance`:py:meth
     :param int price: Timeout waiting for spot instances (only used if price > 0);
                       used as a default in `start_instance`:py:meth
+    :param string vpc: Name or id of Virtual Private Cloud to provision
+                       resources
     """
     __node_start_lock = threading.Lock()  # lock used for node startup
 
