@@ -223,6 +223,7 @@ class BotoCloudProvider(AbstractCloudProvider):
                        boot_disk_type=None,
                        boot_disk_iops=None,
                        placement_group=None,
+                       dedicated=False,
                        **kwargs):
         """Starts a new instance on the cloud using the given properties.
         The following tasks are done to start an instance:
@@ -252,6 +253,7 @@ class BotoCloudProvider(AbstractCloudProvider):
         :param str boot_disk_iops: Provisioned IOPS for the root volume
         :param str placement_group: Enable low-latency networking between
                                     compute nodes.
+        :param bool dedicated: Start in a dedicated tenancy if True.
 
         :return: str - instance id of the started instance
         """
@@ -305,6 +307,12 @@ class BotoCloudProvider(AbstractCloudProvider):
         else:
             bdm = None
 
+        self._tenancy = "default"
+        if dedicated:
+            if not self._vpc:
+                raise InstanceError ("Dedicated instances require a VPC.")
+            self._tenancy = "dedicated"
+
         try:
             #start spot instance if bid is specified
             if price:
@@ -315,7 +323,8 @@ class BotoCloudProvider(AbstractCloudProvider):
                                 network_interfaces=interfaces,
                                 placement_group=placement_group,
                                 block_device_map=bdm,
-                                instance_profile_name=self._instance_profile)[-1]
+                                instance_profile_name=self._instance_profile,
+                                tenancy=self._tenancy)[-1]
 
                 # wait until spot request is fullfilled (will wait
                 # forever if no timeout is given)
