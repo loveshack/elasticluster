@@ -22,9 +22,8 @@
     - http
     - web
   package:
-    pkg: '{{item}}'
+    name: '{{ ganglia_web_packages }}'
     state: '{{ pkg_install_state }}'
-  loop: '{{ ganglia_web_packages }}'
 
 
 - block:
@@ -33,6 +32,9 @@
     stat:
       path: '/etc/apache2/conf-available'
       follow: no
+      get_attributes: no
+      get_checksum: no
+      get_mime: no
     register: apache_conf_available_d
 
   - name: Configure Ganglia web endpoint in /etc/apache2/conf-available (Debian/Ubuntu)
@@ -52,6 +54,9 @@
     stat:
       path: '/etc/apache2/conf.d'
       follow: no
+      get_attributes: no
+      get_checksum: no
+      get_mime: no
     register: apache_conf_d
 
   - name: Configure Ganglia web endpoint in /etc/apache2/conf.d (Debian/Ubuntu)
