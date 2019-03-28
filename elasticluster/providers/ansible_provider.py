@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2013-2018 University of Zurich
+# Copyright (C) 2013-2019 University of Zurich
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -22,8 +22,10 @@ __author__ = str.join(', ', [
 
 # stdlib imports
 from collections import defaultdict
+from datetime import datetime
 import logging
 import os
+import platform
 import tempfile
 import shlex
 import shutil
@@ -199,6 +201,15 @@ class AnsibleSetupProvider(AbstractSetupProvider):
             return self.setup_cluster(cluster, extra_args)
 
     def _run_playbook(self, cluster, playbook, extra_args):
+        run_id = (
+            'elasticluster.{name}.{date}.{pid}@{host}'
+            .format(
+                name=cluster.name,
+                date=datetime.now().isoformat(),
+                pid=os.getpid(),
+                host=platform.node(),
+            )
+        )
         inventory_path = self._build_inventory(cluster)
         if inventory_path is None:
             # no inventory file has been created: this can only happen
@@ -263,11 +274,14 @@ class AnsibleSetupProvider(AbstractSetupProvider):
             ara_dir = os.getcwd()
             ansible_env['ARA_DIR'] = ara_dir
             ansible_env['ARA_DATABASE'] = (
-                'sqlite:///{ara_dir}/ansible.sqlite'
-                .format(ara_dir=ara_dir))
+                'sqlite:///{ara_dir}/{run_id}.ara.sqlite'
+                .format(ara_dir=ara_dir, run_id=run_id))
+            ansible_env['ARA_LOG_CONFIG'] = (
+                '{run_id}.ara.yml'
+                .format(ara_dir=ara_dir, run_id=run_id))
             ansible_env['ARA_LOG_FILE'] = (
-                '{ara_dir}/ara.log'
-                .format(ara_dir=ara_dir))
+                '{run_id}.ara.log'
+                .format(ara_dir=ara_dir, run_id=run_id))
             ansible_env['ARA_LOG_LEVEL'] = 'DEBUG'
             ansible_env['ARA_PLAYBOOK_PER_PAGE'] = '0'
             ansible_env['ARA_RESULT_PER_PAGE'] = '0'
@@ -299,7 +313,7 @@ class AnsibleSetupProvider(AbstractSetupProvider):
                 "Calling `ansible-playbook` with the following environment:")
             for var, value in sorted(ansible_env.items()):
                 # sanity check. Do not print password content....
-                if "password" in var.lower():
+                if "password" in var.lower() or "secret" in var.lower():
                     elasticluster.log.debug("- %s=******", var)
                 else:
                     elasticluster.log.debug("- %s=%r", var, value)
@@ -502,14 +516,14 @@ class AnsibleSetupProvider(AbstractSetupProvider):
         # naming convention (e.g., omit whatever starts with `_`)
 
         extra_vars = cluster.to_vars_dict()
-        extra_vars.update(extra_vars.pop('extra'))
+        extra_vars.update(extra_vars.pop('extra', {}))
         extra_vars['cloud'] = cluster.cloud_provider.to_vars_dict()
         nodes = extra_vars.pop('nodes')
         extra_vars['nodes'] = {}
         for kind, instances in nodes.iteritems():
             for node in instances:
                 node_vars = node.to_vars_dict()
-                node_vars.update(node_vars.pop('extra'))
+                node_vars.update(node_vars.pop('extra', {}))
                 extra_vars['nodes'][node.name] = node_vars
         extra_vars['output_dir'] = os.getcwd()
         # save it to a YAML file
