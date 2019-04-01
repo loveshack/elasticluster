@@ -22,7 +22,11 @@
   yum:
     name: 'https://dl.fedoraproject.org/pub/epel/epel-release-latest-{{ansible_distribution_major_version}}.noarch.rpm'
     state: '{{ pkg_install_state }}'
-  when: 'not epel_repo_file.stat.exists'
+  when: not epel_repo_file.stat.exists and not ansible_distribution == "Amazon"
+
+- name: enable the EPEL repository (AWS)
+  command: amazon-linux-extras install epel
+  when: ansible_distribution == "Amazon"
 
 
 # this is required to have packages like `lua-devel` in RHEL, which
