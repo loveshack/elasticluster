@@ -3,4 +3,4 @@
 
 dependencies:
   # install `lmod` to manage "environment module" files
-  - role: lmod
+  # - role: lmod
