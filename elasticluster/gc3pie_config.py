@@ -105,8 +105,8 @@ def to_bytes(s):
     """
     Convert string `s` to an integer number of bytes.  Suffixes like
     'KB', 'MB', 'GB' (up to 'YB'), with or without the trailing 'B',
-    are allowed and properly accounted for.  Case is ignored in
-    suffixes.
+    are allowed and properly accounted for.  Lower case is powers of 10,
+    upper is powers of 2 -- the SGE convention.
 
     Examples::
 
@@ -115,8 +115,8 @@ def to_bytes(s):
       >>> to_bytes('12B')
       12
       >>> to_bytes('12KB')
-      12000
-      >>> to_bytes('1G')
+      12288
+      >>> to_bytes('1g')
       1000000000
 
     Binary units 'KiB', 'MiB' etc. are also accepted:
@@ -128,20 +128,24 @@ def to_bytes(s):
 
     """
     last = -1
-    unit = s[last].lower()
+    unit = s[last]
     if unit.isdigit():
         # `s` is a integral number
         return int(s)
-    if unit == 'b':
+    if unit == 'b' or unit == 'B':
         # ignore the the 'b' or 'B' suffix
         last -= 1
-        unit = s[last].lower()
-    if unit == 'i':
+        unit = s[last]
+    if unit == 'i':             # KiB etc. (not used by SGE)
         k = 1024
         last -= 1
-        unit = s[last].lower()
+        unit = s[last]
     else:
-        k = 1000
+        if unit.islower():
+            k = 1000
+        else:
+            k = 1024
+    unit = unit.lower()
     # convert the substring of `s` that does not include the suffix
     if unit.isdigit():
         return int(s[0:(last+1)])
