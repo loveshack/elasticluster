@@ -696,7 +696,8 @@ class Cluster(Struct):
             if available < required:
                 log.error(
                     "Not enough nodes of kind `%s`:"
-                    " %d required, but only %d available.",
+                    " %d required, but only %d available.", 
+                    kind, required, available
                 )
                 unsatisfied += 1
 
