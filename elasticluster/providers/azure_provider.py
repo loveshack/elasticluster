@@ -28,6 +28,7 @@ from builtins import object
 import hashlib
 import json
 import os
+import re
 import threading
 from warnings import warn
 import sys
@@ -96,23 +97,6 @@ from elasticluster.exceptions import (
 )
 
 
-_VM_TEMPLATE = json.loads(resource_string(
-    'elasticluster', 'share/etc/azure_vm_template.json'))
-"""
-Resource Manager template for starting a new VM.
-
-Initially taken from:
-https://github.com/Azure-Samples/resource-manager-python-template-deployment/blob/master/templates/template.json
-Copyright (c) 2015 Microsoft Corporation
-"""
-
-_NET_TEMPLATE = json.loads(resource_string(
-    'elasticluster', 'share/etc/azure_net_template.json'))
-"""
-Resource Manager template for creating a new network.
-"""
-
-
 class AzureCloudProvider(AbstractCloudProvider):
     """
     Use the Azure Python SDK to connect to the Azure clouds and
@@ -121,18 +105,54 @@ class AzureCloudProvider(AbstractCloudProvider):
     An AzureCloudProvider owns a tree of Azure resources, rooted in one or
     more subscriptions and one or more storage accounts.
     """
+    __compiled_pattern_for_names = re.compile("^[a-z][a-z0-9-]{1,61}[a-z0-9]$")
+
 
     __lock = threading.Lock()
     """
     Lock used for node startup.
     """
 
-    def __init__(self, subscription_id, tenant_id, client_id, secret, location, **extra):
+    def __init__(self, subscription_id, tenant_id,
+                 client_id, secret, location,
+                 vm_deployment_template=None,
+                 net_deployment_template=None, **extra):
         self.subscription_id = subscription_id
         self.tenant_id = tenant_id
         self.client_id = client_id
         self.secret = secret
         self.location = location
+
+        if vm_deployment_template:
+            try:
+                with open(vm_deployment_template) as template_file:
+                    self.vm_deployment_template = json.load(template_file)
+            except Exception as err:
+                raise ConfigurationError(
+                    "Could not load VM deployment template file `{0}`"
+                    " in provider for Azure cloud: {1}"
+                    .format(vm_deployment_template, err))
+        else:
+            # Azure Resource Manager template for starting a new VM.
+            # Initially taken from:
+            # https://github.com/Azure-Samples/resource-manager-python-template-deployment/blob/master/templates/template.json
+            # Copyright (c) 2015 Microsoft Corporation
+            self.vm_deployment_template = json.loads(resource_string(
+                'elasticluster', 'share/etc/azure_vm_template.json'))
+
+        if net_deployment_template:
+            try:
+                with open(net_deployment_template) as template_file:
+                    self.net_deployment_template = json.load(template_file)
+            except Exception as err:
+                raise ConfigurationError(
+                    "Could not load net deployment template file `{0}`"
+                    " in provider for Azure cloud: {1}"
+                    .format(net_deployment_template, err))
+        else:
+            # Azure Resource Manager template for creating a new network.
+            self.net_deployment_template = json.loads(resource_string(
+                'elasticluster', 'share/etc/azure_net_template.json'))
 
         # these will be initialized later by `_init_az_api()`
         self._compute_client = None
@@ -188,7 +208,11 @@ class AzureCloudProvider(AbstractCloudProvider):
 
     def start_instance(self, key_name, public_key_path, private_key_path,
                        security_group, flavor, image_id, image_userdata,
-                       username='root', node_name=None, **extra):
+                       username='root',
+                       node_name=None,
+                       boot_disk_size=30,
+                       storage_account_type='Standard_LRS',
+                       **extra):
         """
         Start a new VM using the given properties.
 
@@ -208,10 +232,15 @@ class AzureCloudProvider(AbstractCloudProvider):
           (e.g., ``canonical/ubuntuserver/16.04.0-LTS/latest``)
         :param str image_userdata:
           command to execute after startup, **currently unused**
+        :param int boot_disk_size:
+          size of boot disk to use; values are specified in gigabytes.
         :param str username:
           username for the given ssh key
           (default is ``root`` as it's always guaranteed to exist,
           but you probably don't want to use that)
+        :param str storage_account_type:
+          Type of disks to attach to the VM. For a list of valid values,
+          see: https://docs.microsoft.com/en-us/rest/api/compute/disks/createorupdate#diskstorageaccounttypes
 
         :return: tuple[str, str] -- resource group and node name of the started VM
         """
@@ -234,7 +263,20 @@ class AzureCloudProvider(AbstractCloudProvider):
         # extract it from the node name, which always contains it as
         # the substring before the leftmost dash (see `cluster.py`,
         # line 1182)
-        cluster_name, _ = node_name.split('-', 1)
+        cluster_name, _ = node_name.rsplit('-', 1)
+        if not self.__compiled_pattern_for_names.match(cluster_name):
+            raise ConfigurationError("The cluster name `{0}` does not match the Azure requirement for names. "
+                                     "Only numbers, lowercase letters and dashes are allowed, "
+                                     "the value must begin with a lowercase letter and cannot end with a slash, "
+                                     "and must also be less than 63 characters long."
+                                     .format(cluster_name))
+
+        if not self.__compiled_pattern_for_names.match(node_name):
+            raise ConfigurationError("The node name `{0}` does not match the Azure requirement for names. "
+                                     "Only numbers, lowercase letters and dashes are allowed, "
+                                     "the value must begin with a lowercase letter and cannot end with a slash, "
+                                     "and must also be less than 63 characters long."
+                                     .format(node_name))
         with self.__lock:
             if cluster_name not in self._resource_groups_created:
                 self._resource_client.resource_groups.create_or_update(
@@ -265,11 +307,12 @@ class AzureCloudProvider(AbstractCloudProvider):
                 oper = self._resource_client.deployments.create_or_update(
                     cluster_name, net_name, {
                         'mode':       DeploymentMode.incremental,
-                        'template':   _NET_TEMPLATE,
+                        'template':   self.net_deployment_template,
                         'parameters': net_parameters,
                     })
                 oper.wait()
                 self._networks_created.add(net_name)
+        boot_disk_size_gb = int(boot_disk_size)
 
         vm_parameters = {
             'adminUserName':  { 'value': username },
@@ -285,9 +328,11 @@ class AzureCloudProvider(AbstractCloudProvider):
                 'value': self._make_storage_account_name(
                     cluster_name, node_name)
             },
+            'storageAccountType': { 'value': storage_account_type },
             'subnetName':     { 'value': cluster_name },
             'vmName':         { 'value': node_name },
             'vmSize':         { 'value': flavor },
+            'bootDiskSize':   { 'value': boot_disk_size_gb}
         }
         log.debug(
             "Deploying `%s` VM template to Azure ...",
@@ -295,7 +340,7 @@ class AzureCloudProvider(AbstractCloudProvider):
         oper = self._resource_client.deployments.create_or_update(
             cluster_name, node_name, {
                 'mode':       DeploymentMode.incremental,
-                'template':   _VM_TEMPLATE,
+                'template':   self.vm_deployment_template,
                 'parameters': vm_parameters,
             })
         oper.wait()
@@ -349,12 +394,13 @@ class AzureCloudProvider(AbstractCloudProvider):
                 # we must delete resources in a specific order: e.g.,
                 # a public IP address cannot be deleted if it's still
                 # in use by a NIC...
-                (node_name,                '2017-12-01'),
-                (node_name + '-nic',       '2018-03-01'),
-                (node_name + '-public-ip', '2018-03-01'),
-                (self._make_storage_account_name(
+                (node_name,                '2018-06-01'),
+                (node_name + '-nic',       '2018-10-01'),
+                (node_name + '-public-ip', '2018-10-01'),
+                (node_name + '-disk',      '2018-09-30'),
+            (self._make_storage_account_name(
                     cluster_name, node_name),
-                                           '2017-10-01'),
+                                           '2018-07-01'),
         ]:
             rsc_id = self._inventory[name]
             log.debug("Deleting resource %s (`%s`) ...", name, rsc_id)
@@ -387,7 +433,7 @@ class AzureCloudProvider(AbstractCloudProvider):
         """
         self._init_az_api()
         cluster_name, node_name = instance_id
-        # XXX: keep in sync with contents of `_VM_TEMPLATE`
+        # XXX: keep in sync with contents of `vm_deployment_template`
         ip_name = ('{node_name}-public-ip'.format(node_name=node_name))
         ip = self._network_client.public_ip_addresses.get(cluster_name, ip_name)
         if (ip.provisioning_state == 'Succeeded' and ip.ip_address):
