@@ -21,21 +21,13 @@
 - name: Install common HPC software (RHEL/CentOS)
   package:
     name:
-      - atlas-devel
       - gcc-c++
       - gcc-gfortran
-      - hdf5
-      - hdf5-openmpi
-      - hdf5-openmpi-devel
       - make
-      - netcdf-devel
-      - netcdf-openmpi
-      - netcdf-openmpi-devel
-      - openblas-devel
       - openmpi-devel
       - openmpi3-devel
-      - scalapack-openmpi
-      - scalapack-openmpi-devel
+      - libipm-openmpi
+      - libipm-openmpi3
     state: '{{ pkg_install_state }}'
   when: is_rhel7_compatible
 
