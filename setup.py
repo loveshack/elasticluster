@@ -75,7 +75,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="elasticluster",
-    version='1.3.dev12',
+    version='1.3.dev15',
     description="A command line tool to create, manage and setup computing clusters hosted on a public or private cloud infrastructure.",
     long_description=read_whole_file('README.rst'),
     author=", ".join([
@@ -124,7 +124,7 @@ setup(
         'pip>=9.0.0',  ## see issue #433
         #'ara',  # optional
         'PyCLI',
-        'ansible>=2.5',
+        'ansible>=2.7',
         'click>=4.0',  ## click.prompt() added in 4.0
         'coloredlogs',
         'netaddr',
