@@ -41,4 +41,6 @@
       - screen
       - tmux
       - vim
+      - yum-plugin-copr
+      - mg
     state: '{{ pkg_install_state }}'
