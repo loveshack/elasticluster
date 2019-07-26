@@ -1,6 +1,6 @@
 hostname {{ item }}
 load_scaling NONE
-complex_values slots={{ hostvars[item].ansible_processor_cores|default(1) }}
+complex_values slots={{ hostvars[item].ansible_processor_cores|default(1) }},excl=1
 user_lists NONE
 xuser_lists NONE
 projects NONE

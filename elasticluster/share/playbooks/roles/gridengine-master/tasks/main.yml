@@ -223,4 +223,25 @@
     - gridengine-master
   shell: |
     bash -lc 'qconf -sq all.q &> /dev/null || qconf -Aq {{SGE_ROOT}}/all.q.conf'
+  register: command_result
+  changed_when: "'added' in command_result.stdout"
   when: is_debian_compatible
+
+- name: Other SGE conf 1
+  tags:
+    - gridengine
+    - gridengine-master
+  # <(...) fails because qmaster doesn't see the fd
+  shell: |
+    bash -lc 'T=$(mktemp); echo >>$T excl excl bool excl yes yes 0 0; qconf -Mc $T 2>/dev/null||:; rm $T'
+  register: command_result
+  changed_when: "'added' in command_result.stdout"
+
+- name: Other SGE conf 2
+  tags:
+    - gridengine
+    - gridengine-master
+  template:
+    dest: '{{SGE_VAR}}/{{SGE_CELL}}/common/sge_request'
+    # not actually templated
+    src: 'request.j2'
