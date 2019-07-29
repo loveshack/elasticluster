@@ -104,6 +104,17 @@
     state: started
 
 
+- name: SGE complexes
+  tags:
+    - gridengine
+    - gridengine-master
+  # <(...) fails because qmaster doesn't see the fd
+  shell: |
+    bash -lc 'T=$(mktemp); echo >>$T excl excl bool excl yes yes 0 0; qconf -Mc $T 2>/dev/null||:; rm $T'
+  register: command_result
+  changed_when: "'added' in command_result.stdout"
+
+
 - name: upload configuration file for host
   tags:
     - gridengine
@@ -227,17 +238,7 @@
   changed_when: "'added' in command_result.stdout"
   when: is_debian_compatible
 
-- name: Other SGE conf 1
-  tags:
-    - gridengine
-    - gridengine-master
-  # <(...) fails because qmaster doesn't see the fd
-  shell: |
-    bash -lc 'T=$(mktemp); echo >>$T excl excl bool excl yes yes 0 0; qconf -Mc $T 2>/dev/null||:; rm $T'
-  register: command_result
-  changed_when: "'added' in command_result.stdout"
-
-- name: Other SGE conf 2
+- name: SGE request conf
   tags:
     - gridengine
     - gridengine-master
