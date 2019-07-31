@@ -175,6 +175,8 @@ if [ "$use_eatmydata" = 'yes' ]; then
                 7*)
                     sudo yum install -y yum-plugin-copr
                     sudo yum copr enable -y loveshack/livhpc
+		    # Shouldn't be on by default
+                    sudo yum-config-manager -y --disable loveshack/livhpc
                     ;;
                 6*)
                     # CentOS 6 does not have YUM's COPR plugin so just create the repo file
@@ -189,12 +191,12 @@ skip_if_unavailable=True
 gpgcheck=1
 gpgkey=https://copr-be.cloud.fedoraproject.org/results/loveshack/livhpc/pubkey.gpg
 repo_gpgcheck=0
-enabled=1
+enabled=0
 enabled_metadata=1
 __EOF__
                     ;;
             esac
-            sudo yum install -y libeatmydata
+            sudo yum --enablerepo loveshack-livhpc install -y libeatmydata
             ;;
     esac
     # create wrapper script to call Python with libeatmydata preloaded
